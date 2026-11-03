@@ -1,0 +1,123 @@
+/* Tipografia e espaçamento — Planejador de Viagens
+   Hanken Grotesk na interface, Fraunces nos números, nomes de lugar e conquistas.
+   Ambas sob SIL Open Font License, livres para embarcar em app comercial.
+
+   Por que não Inter e Space Grotesk: são as duas fontes mais associadas a
+   design gerado por IA, a ponto de serem banidas por padrão em ferramentas
+   de design assistido. Num produto cuja mecânica é copiável, a identidade
+   visual faz parte da defesa.
+
+   React Native / Expo:
+     npx expo install @expo-google-fonts/hanken-grotesk @expo-google-fonts/fraunces expo-font */
+
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Fraunces:opsz,wght,SOFT,WONK@9..144,400..900,0..100,0..1&display=swap');
+
+:root {
+  --font-ui:      'Hanken Grotesk', system-ui, sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+
+  /* Ajuste dos eixos variáveis da Fraunces.
+     SOFT sobe a maciez, WONK liga as letras propositalmente tortas.
+     É isso que tira a fonte do registro corporativo. */
+  --display-axes: 'SOFT' 45, 'WONK' 1;
+
+  /* Fraunces: número, nome de lugar, título de conquista */
+  --display-xl:   44px;  --display-xl-lh:   48px;  /* 700 */
+  --display-l:    28px;  --display-l-lh:    32px;  /* 700 */
+  --place:        24px;  --place-lh:        30px;  /* 600 */
+  --achievement:  20px;  --achievement-lh:  26px;  /* 600 */
+
+  /* Hanken Grotesk: todo o resto */
+  --heading:      19px;  --heading-lh:      26px;  /* 600 */
+  --body-l:       17px;  --body-l-lh:       26px;  /* 400 */
+  --body:         15px;  --body-lh:         22px;  /* 400 */
+  --label:        13px;  --label-lh:        18px;  /* 600 */
+  --caption:      13px;  --caption-lh:      18px;  /* 400 */
+  --micro:        11px;  --micro-lh:        14px;  /* 500 */
+
+  /* Espaçamento, grade de 4 */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --touch-min: 48px;
+  --screen-margin: var(--space-4);
+  --card-padding: var(--space-4);
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-axes);
+}
+
+/* NÚMEROS — verificado
+
+   A Fraunces NÃO tem a feature tnum, só algarismo proporcional.
+   A Hanken Grotesk TEM tnum, além de lnum, onum e zero.
+
+   A solução não é escolher uma fonte para todos os números, é separar
+   por contexto, porque o problema do algarismo proporcional só aparece
+   quando há coluna para desalinhar.
+
+   .num-hero  número isolado: perfil, card de cidade, tela de conquista.
+              Não tem nada com que se alinhar, então proporcional serve.
+              A Fraunces fica exatamente onde ela precisa estar, que é
+              no momento de recompensa.
+              Exige min-width no container, senão o bloco muda de
+              largura quando o número muda e empurra o layout.
+
+   .num-list  número em coluna: lista de cidades com percentual,
+              estatísticas, qualquer tabela. Aqui proporcional entorta
+              a coluna inteira, então vai de Hanken Grotesk com tnum. */
+
+.num-hero {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-axes);
+  min-width: 3ch;
+  display: inline-block;
+  text-align: right;
+}
+
+.num-list {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Regras de uso:
+
+   1. Fraunces só em número, nome de lugar e título de conquista.
+      Se ela vazar para texto corrido, some a distinção que dá peso
+      ao destrave, e a leitura piora: ela é fonte de display.
+
+   2. Nada de Fraunces abaixo de 20px. Fonte de display não aguenta
+      corpo pequeno.
+
+   3. Nenhum texto abaixo de 11px, e 11px só em rótulo curto e
+      maiúsculo. Corpo de texto nunca abaixo de 15px.
+
+   4. Alvo de toque mínimo de 48x48, mesmo que o ícone seja menor.
+      Vale principalmente para o pino no mapa, que é pequeno e vai
+      ser tocado com o dedo, em movimento, na rua, às vezes com sol
+      na tela.
+
+   5. Só três pesos por família: 400, 500 e 600 na Hanken Grotesk,
+      600 e 700 na Fraunces. Mais pesos incham o bundle sem ganho.
+
+   6. Toda medida sai da grade de 4. Valor fora da grade é bug de
+      layout, não escolha de design.
+
+   7. Nunca animar a contagem do número. Se o percentual sobe de 18
+      para 34 tiquetaqueando, os dígitos dançam, porque a Fraunces é
+      proporcional. A animação da recompensa é a névoa abrindo e o
+      pino destravando, não o contador correndo. É melhor design de
+      qualquer forma: o que emociona é o mapa se abrindo.
+*/

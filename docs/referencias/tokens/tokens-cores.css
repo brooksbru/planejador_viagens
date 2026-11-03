@@ -1,0 +1,97 @@
+/* Paleta "Névoa e trópico" — Planejador de Viagens
+   Derivada de duas referências: um lago com névoa e uma praia tropical.
+   Todos os pares testados em WCAG AA (4.5:1 texto, 3:1 gráfico).
+   Uso: :root = tema escuro (base). [data-theme="light"] sobrescreve. */
+
+:root {
+  --bg:              #0C2630;
+  --surface:         #16404E;
+  --surface-raised:  #1F5464;
+  --border:          #2A5A6B;
+
+  --action:          #00C8FF;
+  --action-hover:    #4FD9FF;
+  --on-action:       #002733;
+
+  --achievement:     #8AEE1F;
+  --achievement-hover:#9DF53F;
+  --on-achievement:  #182D0A;
+
+  --fog:             #E4DECE;
+  --fog-outline:     transparent;
+
+  --locked:          #4A7F8C;
+
+  --text-primary:    #EFEADC;
+  --text-secondary:  #A9BFC6;
+  --text-muted:      #7F9BA4;
+
+  --success:         #8AEE1F;
+  --danger:          #FF7B8F;
+  --warning:         #F0B429;
+
+  /* paisagem do mapa, não usar em interface */
+  --terrain-water:   #356879;
+  --terrain-olive:   #617E2A;
+  --terrain-forest:  #28441A;
+  --terrain-sand:    #D4CEB7;
+}
+
+[data-theme="light"] {
+  --bg:              #F2EEE2;
+  --surface:         #FBF8F0;
+  --surface-raised:  #FFFFFF;
+  --border:          #D8D1C0;
+
+  --action:          #00768F;
+  --action-hover:    #005C71;
+  --on-action:       #FFFFFF;
+
+  --achievement:     #3F7A14;
+  --achievement-hover:#33630F;
+  --on-achievement:  #FFFFFF;
+
+  --fog:             #FBF8F0;
+  --fog-outline:     #9DA893;
+
+  --locked:          #5A7E88;
+
+  --text-primary:    #152A32;
+  --text-secondary:  #42606C;
+  --text-muted:      #52707C;
+
+  --success:         #3F7A14;
+  --danger:          #B3243C;
+  --warning:         #8A5A00;
+
+  --terrain-water:   #8FB0BA;
+  --terrain-olive:   #A9C077;
+  --terrain-forest:  #7FA954;
+  --terrain-sand:    #EDE6D8;
+}
+
+/* Regras de uso, não são decorativas:
+
+   1. --achievement só em check-in feito, % desbloqueado e conquista.
+      Se virar cor de botão comum, o destrave perde o peso emocional.
+
+   2. --action é ação, --achievement é conquista. Nunca inverter.
+      Eles ficam a 102° um do outro, separação menor que o ideal,
+      por isso o ícone diferente entre os estados é obrigatório.
+
+   3. Todo pino leva anel de 2px na cor da superfície embaixo dele.
+      Sem o anel, o pino perde contraste ao cair sobre a névoa.
+
+   4. Os três estados do pino (planejado, trancado, desbloqueado)
+      mudam de ícone além da cor. Cor sozinha exclui daltônicos.
+
+   5. As cores --terrain-* são do mapa, não da interface. No Mapbox
+      use versões mais lavadas que estas, senão os pinos se perdem
+      no meio da paisagem.
+
+   6. No tema claro, --action e --achievement já estão no teto de
+      saturação que passa em AA sobre areia. Não intensificar mais.
+
+   7. No tema claro a névoa é quase branca sobre areia clara:
+      --fog-outline é obrigatório, não opcional.
+*/
