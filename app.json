@@ -24,6 +24,19 @@
     "plugins": [
       "expo-router",
       [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/HankenGrotesk-Regular.ttf",
+            "./assets/fonts/HankenGrotesk-Medium.ttf",
+            "./assets/fonts/HankenGrotesk-SemiBold.ttf",
+            "./assets/fonts/Fraunces-SemiBold.ttf",
+            "./assets/fonts/Fraunces-Bold.ttf",
+            "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf"
+          ]
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#0C2630",
