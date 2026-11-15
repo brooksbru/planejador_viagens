@@ -96,3 +96,13 @@ npm start                 # Metro para o development build já instalado
 npm run android:release   # build release (para medir desempenho)
 npm run typecheck && npm run lint && npm run format:check
 ```
+
+## Build no Windows (pré-requisitos da máquina)
+
+O build nativo gera arquivos C++ com caminho acima de 260 caracteres. Sem os itens abaixo ele falha com `ninja: error: ... Filename longer than 260 characters`:
+
+- Projeto em caminho curto e sem espaços (`C:\dev\planejador_viagens`)
+- Caminhos longos ativos no Windows (`LongPathsEnabled = 1` em `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem`)
+- CMake 4.1.2 instalado pelo SDK Manager do Android Studio (traz o ninja 1.12, que aceita caminhos longos). A versão é fixada em `app.json` via `expo-build-properties`
+- JDK 17 no `JAVA_HOME` e `ANDROID_HOME` apontando para o SDK
+- No PowerShell, usar `npx.cmd`/`npm.cmd` (a política de execução bloqueia os `.ps1`)

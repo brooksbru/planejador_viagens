@@ -24,6 +24,14 @@
     "plugins": [
       "expo-router",
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "cmakeVersion": "4.1.2"
+          }
+        }
+      ],
+      [
         "expo-font",
         {
           "fonts": [
@@ -43,7 +51,8 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-build-properties"
     ],
     "experiments": {
       "typedRoutes": true,
