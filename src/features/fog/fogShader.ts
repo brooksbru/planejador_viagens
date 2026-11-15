@@ -1,4 +1,4 @@
-import { HOLE_REACH, MAX_HOLES, NOISE_PERIOD } from './fogMath';
+import { HOLE_REACH, LAND_MASK_SIZE, MAX_HOLES, NOISE_PERIOD } from './fogMath';
 
 /**
  * Shader da névoa (SkSL, roda na GPU a cada pixel).
@@ -18,6 +18,8 @@ import { HOLE_REACH, MAX_HOLES, NOISE_PERIOD } from './fogMath';
  *  3. O limiar é perturbado pelo relevo, o que deixa a borda esfiapada.
  *  4. O relevo é iluminado de um lado, o que dá o volume.
  *  5. As duas camadas derivam com o "vento" em velocidades diferentes.
+ *  6. A névoa só existe sobre a terra: uma máscara do mundo (terra/mar) corta
+ *     as duas camadas no litoral, com a mesma borda esfiapada.
  */
 export const FOG_SHADER = `
 uniform float2 uRes;       // tamanho da tela, em pontos
@@ -31,10 +33,13 @@ uniform float  uHoleCount;
 uniform float4 uTap;       // x, y, raio (pontos de tela), força 0..1
 uniform float3 uFog;       // cor da névoa
 uniform float4 uOutline;   // cor do contorno; alpha 0 desliga
+uniform shader uLand;      // máscara do mundo em Web Mercator: branco = terra
+uniform float3 uWorld;     // centro da câmera no mundo (x, y em 0..1) e lado do mundo em pontos
 uniform float  uDebug;     // 1 desenha uma mira no centro de cada buraco (teste de sincronia)
 
 const float PERIOD = ${NOISE_PERIOD}.0;
 const float REACH = ${HOLE_REACH}.0;
+const float LAND_SIZE = ${LAND_MASK_SIZE}.0;
 
 float hash(float2 p) {
   p = mod(p, PERIOD);
@@ -181,6 +186,33 @@ half4 main(float2 fragCoord) {
   float band = smoothstep(0.08, 0.35, edge) * (1.0 - smoothstep(0.45, 0.80, edge));
   thinC = mix(thinC, uOutline.rgb, band * uOutline.a);
   thinA = max(thinA, band * uOutline.a * 0.9);
+
+  // --- Litoral: névoa só sobre a terra ------------------------------------
+  // A máscara é borrada (0 no mar, 1 na terra, ~0.5 na costa). Cortar abaixo
+  // de 0.5 faz a névoa passar um pouco da costa, pra nenhum lugar em terra
+  // ficar descoberto. x sem fract: a imagem repete na horizontal.
+  // A posição consultada na máscara é deslocada pelo relevo da nuvem (até
+  // ~16 pontos de tela), o que recorta o litoral de forma orgânica em
+  // qualquer zoom.
+  float2 coastWarp = float2(h - 0.45, v - 0.5) * 32.0;
+  float2 world = uWorld.xy + (fromCenter + coastWarp) / uWorld.z;
+  float land = uLand.eval(float2(world.x, clamp(world.y, 0.0, 1.0)) * LAND_SIZE).r;
+  // Esfiapado e largura da borda medidos em pontos de tela: de longe a costa
+  // sai recortada, de perto vira uma borda suave em vez de nuvens soltas.
+  float texelsPerPoint = LAND_SIZE / uWorld.z;
+  float coastFray = min(0.20, 4.0 * texelsPerPoint);
+  float coastSoft = min(0.10, 2.5 * texelsPerPoint);
+  float denseLand = smoothstep(
+    0.27 - coastSoft, 0.27 + coastSoft,
+    land + ((h - 0.45) * 1.0 + (v - 0.5) * 0.8) * coastFray
+  );
+  // O véu vai um pouco além da camada densa e se desfaz mais devagar.
+  float thinLand = smoothstep(
+    0.17 - coastSoft * 1.6, 0.17 + coastSoft * 1.6,
+    land + ((0.5 - h) * 0.7 + (v - 0.5) * 0.9) * coastFray
+  );
+  denseA *= denseLand;
+  thinA *= thinLand;
 
   // --- Composição: densa sobre a fina (alpha pré-multiplicado) -------------
   float alpha = denseA + thinA * (1.0 - denseA);

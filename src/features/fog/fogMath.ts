@@ -18,6 +18,8 @@ export const MAX_HOLES = 32;
 export const NOISE_CELL_PX = 150;
 /** Período do ruído, em células. O hash do shader repete a cada NOISE_PERIOD. */
 export const NOISE_PERIOD = 256;
+/** Lado, em pixels, da máscara de terra (assets/images/land-mask.png). */
+export const LAND_MASK_SIZE = 2048;
 /** A área de influência de um buraco vai até este múltiplo do raio. */
 export const HOLE_REACH = 2;
 

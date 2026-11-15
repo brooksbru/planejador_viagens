@@ -1,4 +1,13 @@
-import { Canvas, Fill, Shader, Skia, useClock } from '@shopify/react-native-skia';
+import {
+  Canvas,
+  Fill,
+  FilterMode,
+  ImageShader,
+  Shader,
+  Skia,
+  useClock,
+  useImage,
+} from '@shopify/react-native-skia';
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import {
@@ -74,6 +83,8 @@ type Frame = {
   holeCount: number;
   newestIndex: number;
   tap: number[];
+  /** Centro da câmera no mundo (x, y em 0..1) e lado do mundo em pontos de tela. */
+  world: number[];
   /** Instante da amostra de câmera (ms, relógio do aparelho). 0 = sem amostra. */
   ts: number;
   /** Velocidade do pan em pontos de tela por ms. */
@@ -89,6 +100,7 @@ const EMPTY_FRAME: Frame = {
   holeCount: 0,
   newestIndex: -1,
   tap: [0, 0],
+  world: [0.5, 0.5, 512],
   ts: 0,
   vx: 0,
   vy: 0,
@@ -121,6 +133,8 @@ export function FogOverlay({
   const tapStrength = useSharedValue(0);
   const reveal = useSharedValue(1);
   const clock = useClock();
+  // Máscara de terra/mar do mundo. Enquanto não carrega, a névoa não aparece.
+  const landMask = useImage(require('@/assets/images/land-mask.png'));
 
   const recompute = useCallback(() => {
     const viewport = sizeRef.current;
@@ -130,6 +144,7 @@ export function FogOverlay({
     const projected = projectHoles(holesRef.current, camera, viewport, minRadiusRef.current);
     const tap = tapRef.current ? project(tapRef.current, camera, viewport) : { x: 0, y: 0 };
     const sample = sampleRef.current;
+    const center = lngLatToWorld(camera.center);
 
     frame.set({
       noiseA: [noise.a.offsetX, noise.a.offsetY, noise.a.cellsPerPixel],
@@ -139,6 +154,7 @@ export function FogOverlay({
       holeCount: projected.count,
       newestIndex: projected.newestIndex,
       tap: [tap.x, tap.y],
+      world: [center.x, center.y, worldSize(camera.zoom)],
       ts: sample.ts,
       vx: sample.vx,
       vy: sample.vy,
@@ -252,6 +268,7 @@ export function FogOverlay({
       uTap: [f.tap[0] - sx, f.tap[1] - sy, TAP_RADIUS, tapStrength.value],
       uFog: fogRgb,
       uOutline: outlineRgba,
+      uWorld: [f.world[0] + sx / f.world[2], f.world[1] + sy / f.world[2], f.world[2]],
       uDebug: debugCenters ? 1 : 0,
     };
   });
@@ -259,7 +276,7 @@ export function FogOverlay({
   return (
     // pointerEvents="none": todo toque atravessa a névoa e chega ao mapa.
     <View style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
-      {effect && width > 0 ? (
+      {effect && landMask && width > 0 ? (
         <Canvas
           style={{
             width: width / renderScale,
@@ -269,7 +286,15 @@ export function FogOverlay({
           }}
         >
           <Fill>
-            <Shader source={effect} uniforms={uniforms} />
+            <Shader source={effect} uniforms={uniforms}>
+              <ImageShader
+                image={landMask}
+                tx="repeat"
+                ty="clamp"
+                fit="none"
+                sampling={{ filter: FilterMode.Linear }}
+              />
+            </Shader>
           </Fill>
         </Canvas>
       ) : null}
