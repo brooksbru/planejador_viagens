@@ -10,7 +10,8 @@ import type { Camera } from '@/lib/geo';
 import { useTheme } from '@/theme';
 
 // Spike da Fase 1: mapa + névoa, com dados só em memória.
-const INITIAL_CAMERA: Camera = { center: [-9.1393, 38.7223], zoom: 14 }; // Lisboa
+// Visão inicial: o Brasil inteiro. A pessoa aproxima até onde quiser.
+const INITIAL_CAMERA: Camera = { center: [-54, -15], zoom: 2.8 };
 
 export default function Mapa() {
   const { colors, typography, space, layout, radius, scheme } = useTheme();

@@ -21,7 +21,7 @@ uniform float3 uNoiseB;    // idem, nível superior
 uniform float  uBlend;     // mistura entre os dois níveis
 uniform float3 uHoles[${MAX_HOLES}]; // x, y, raio (pontos de tela)
 uniform float  uHoleCount;
-uniform float4 uTap;       // x, y, raio (pontos de tela), força 0..1
+uniform float4 uTap;       // x, y, alcance do sopro (pontos de tela), força 0..1
 uniform float3 uFog;       // cor da névoa
 uniform float4 uOutline;   // cor do contorno; alpha 0 desliga
 
@@ -85,11 +85,13 @@ half4 main(float2 fragCoord) {
   float2 xy = fragCoord * uScale;
   float2 fromCenter = xy - uRes * 0.5;
 
-  // Toque: empurra a amostragem do relevo pra fora do ponto tocado.
+  // Toque: um sopro. Queda gaussiana (sem borda definida) a partir do ponto
+  // tocado; a nuvem é empurrada de leve pra fora, sem abrir buraco.
   float2 tapDir = xy - uTap.xy;
   float tapDist = length(tapDir);
-  float tapK = uTap.w * kernel(tapDist, uTap.z * 1.6);
-  float2 pushed = fromCenter - normalize(tapDir + float2(0.0001)) * tapK * uTap.z * 0.35;
+  float tapK = uTap.w * exp(-(tapDist * tapDist) / (uTap.z * uTap.z));
+  // Deslocamento proporcional à distância: zero no centro, sem vinco no ponto tocado.
+  float2 pushed = fromCenter - tapDir * tapK * 0.55;
 
   float2 pa = noiseCoord(uNoiseA, pushed);
   float2 pb = noiseCoord(uNoiseB, pushed);
@@ -110,9 +112,6 @@ half4 main(float2 fragCoord) {
       field += kernel(distance(xy, hole.xy), hole.z * REACH);
     }
   }
-  // Toque: abre temporariamente ao redor do dedo.
-  field += uTap.w * kernel(tapDist, uTap.z * REACH) * 1.4;
-
   // kernel(raio, raio * REACH) = 0.42: o buraco sozinho abre perto do raio.
   // O relevo desloca o limiar só onde já existe campo, pra borda esfiapar
   // sem abrir furos longe dos buracos.
@@ -125,6 +124,11 @@ half4 main(float2 fragCoord) {
   float3 light = min(uFog * 1.05, float3(1.0));
   float lit = smoothstep(0.2, 0.8, shade) * 0.45 + smoothstep(0.05, 0.55, h) * 0.55;
   float3 color = mix(shadow, light, lit);
+
+  // Sopro: a névoa afina onde foi soprada, mais nos vincos do que nos gomos,
+  // e sempre sobra uma camada fina sobre o mapa.
+  float thin = tapK * (0.62 + 0.38 * (1.0 - h));
+  alpha *= 1.0 - 0.66 * clamp(thin, 0.0, 1.0);
 
   // A névoa fica mais rala perto da borda aberta.
   alpha *= mix(0.82, 1.0, smoothstep(0.0, 0.6, alpha));
