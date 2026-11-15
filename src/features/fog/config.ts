@@ -9,4 +9,6 @@ export const FOG_CONFIG = {
   minHoleRadiusPx: 5,
   /** Redução da resolução de render da névoa. 2 = metade em cada eixo. */
   renderScale: 2,
+  /** Prevê a câmera durante o pan, pra névoa não ficar pra trás no arrasto rápido. */
+  predictPan: true,
 } as const;

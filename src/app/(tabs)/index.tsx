@@ -25,6 +25,7 @@ export default function Mapa() {
   const [holes, setHoles] = useState<FogHole[]>([]);
   const [hasLocation, setHasLocation] = useState(false);
   const [showMarkers, setShowMarkers] = useState(false);
+  const [predict, setPredict] = useState(true);
 
   const openHoleHere = () => {
     // Sem GPS ainda, usa o centro do mapa pra o teste não travar.
@@ -53,9 +54,9 @@ export default function Mapa() {
         scheme={scheme}
         showUserLocation
         debugPoints={showMarkers ? holes.map((hole) => hole.lngLat) : undefined}
-        onCameraChange={(camera) => {
+        onCameraChange={(camera, timestampMs) => {
           cameraRef.current = camera;
-          fogRef.current?.setCamera(camera);
+          fogRef.current?.setCamera(camera, timestampMs);
         }}
         onPress={(event) => fogRef.current?.dissipate(event.lngLat)}
         onUserLocation={(location) => {
@@ -72,6 +73,8 @@ export default function Mapa() {
         outlineColor={colors.fogOutline}
         renderScale={FOG_CONFIG.renderScale}
         minHoleRadiusPx={FOG_CONFIG.minHoleRadiusPx}
+        predictPan={predict && FOG_CONFIG.predictPan}
+        debugCenters={showMarkers}
       />
 
       {/* Controles de teste do spike. Saem quando o check-in de verdade existir. */}
@@ -105,6 +108,11 @@ export default function Mapa() {
           >
             <Text style={[typography.label, { color: colors.textPrimary }]}>Minha posição</Text>
           </Pressable>
+          <Pressable onPress={() => setPredict((value) => !value)} style={[styles.center, chip]}>
+            <Text style={[typography.label, { color: colors.textPrimary }]}>
+              {predict ? 'Previsão: sim' : 'Previsão: não'}
+            </Text>
+          </Pressable>
         </View>
 
         <Pressable
@@ -131,6 +139,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   top: { position: 'absolute' },
   bottom: { position: 'absolute', left: 0, right: 0 },
-  row: { flexDirection: 'row' },
+  row: { flexDirection: 'row', flexWrap: 'wrap' },
   center: { alignItems: 'center', justifyContent: 'center' },
 });

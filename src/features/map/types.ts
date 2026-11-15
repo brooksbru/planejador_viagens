@@ -24,8 +24,11 @@ export type MapCanvasProps = {
   initialCamera: Camera;
   /** Tema do mapa base. */
   scheme: 'dark' | 'light';
-  /** Chamado continuamente durante pan e zoom. */
-  onCameraChange?: (camera: Camera) => void;
+  /**
+   * Chamado continuamente durante pan e zoom. timestampMs é o instante (relógio
+   * do aparelho) em que o mapa gerou a amostra, que chega aqui com atraso.
+   */
+  onCameraChange?: (camera: Camera, timestampMs: number) => void;
   /** Toque simples. Não dispara em pan, zoom ou toque duplo. */
   onPress?: (event: MapPressEvent) => void;
   /** Mostra o ponto azul e passa a reportar a posição. Pede a permissão se preciso. */

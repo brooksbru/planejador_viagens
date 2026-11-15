@@ -31,6 +31,7 @@ uniform float  uHoleCount;
 uniform float4 uTap;       // x, y, raio (pontos de tela), força 0..1
 uniform float3 uFog;       // cor da névoa
 uniform float4 uOutline;   // cor do contorno; alpha 0 desliga
+uniform float  uDebug;     // 1 desenha uma mira no centro de cada buraco (teste de sincronia)
 
 const float PERIOD = ${NOISE_PERIOD}.0;
 const float REACH = ${HOLE_REACH}.0;
@@ -129,11 +130,17 @@ half4 main(float2 fragCoord) {
 
   // Campo dos buracos permanentes (metaball).
   float holes = 0.0;
+  float cross = 0.0;
   for (int i = 0; i < ${MAX_HOLES}; i++) {
     if (float(i) < uHoleCount) {
       float3 hole = uHoles[i];
       holes += kernel(distance(xy, hole.xy), hole.z * REACH);
+      float2 d = abs(xy - hole.xy);
+      cross = max(cross, step(min(d.x, d.y), 1.0) * step(max(d.x, d.y), 22.0));
     }
+  }
+  if (uDebug > 0.5 && cross > 0.5) {
+    return half4(0.0, 1.0, 1.0, 1.0);
   }
   // O toque entra no campo da camada densa como um buraco igual aos
   // permanentes, então a borda esfiapa do mesmo jeito. No fechamento o raio

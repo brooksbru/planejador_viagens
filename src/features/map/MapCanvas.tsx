@@ -80,7 +80,10 @@ export function MapCanvas({
       compassEnabled={false}
       onCameraChanged={(state) => {
         const [lng, lat] = state.properties.center;
-        onCameraChange?.({ center: [lng, lat], zoom: state.properties.zoom });
+        onCameraChange?.(
+          { center: [lng, lat], zoom: state.properties.zoom },
+          state.timestamp ?? Date.now(),
+        );
       }}
       onPress={(feature) => {
         const [lng, lat] = feature.geometry.coordinates;

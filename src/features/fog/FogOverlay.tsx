@@ -4,12 +4,13 @@ import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import {
   Easing,
   useDerivedValue,
+  useFrameCallback,
   useSharedValue,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
 
-import { project, type Camera, type LngLat } from '@/lib/geo';
+import { lngLatToWorld, project, worldSize, type Camera, type LngLat } from '@/lib/geo';
 
 import { computeNoise, MAX_HOLES, projectHoles, type FogHole } from './fogMath';
 import { FOG_SHADER } from './fogShader';
@@ -24,9 +25,25 @@ const TAP_OPEN_MS = 260;
 // A abertura some de vista um pouco antes do fim da animação (~1,8 s de fechamento visível).
 const TAP_CLOSE_MS = 2300;
 
+// Previsão do pan (ver o comentário junto do useFrameCallback).
+/**
+ * Ajuste somado ao tempo decorrido desde a amostra. Negativo porque o mapa
+ * também demora a desenhar a câmera que anunciou, então a névoa não precisa
+ * adiantar o tempo todo. Calibrado medindo o desvio no emulador (ver
+ * docs/fase-1.md); pode precisar de ajuste em aparelho real.
+ */
+const PIPELINE_MS = -8;
+/** Teto de quanto adiantar, pra um atraso anormal não jogar a névoa longe. */
+const PREDICT_MAX_MS = 70;
+/** Sem amostra nova por mais que isso, a previsão começa a sumir. */
+const PREDICT_HOLD_MS = 90;
+
 export type FogOverlayHandle = {
-  /** Avisa a névoa de cada mudança de câmera do mapa. */
-  setCamera: (camera: Camera) => void;
+  /**
+   * Avisa a névoa de cada mudança de câmera do mapa. timestampMs é o instante
+   * (relógio do aparelho) em que o mapa gerou a amostra.
+   */
+  setCamera: (camera: Camera, timestampMs?: number) => void;
   /** Abre a camada densa ao redor do ponto; ela fecha de volta em seguida. A fina fica. */
   dissipate: (lngLat: LngLat) => void;
 };
@@ -43,6 +60,10 @@ export type FogOverlayProps = {
   renderScale?: number;
   /** Raio mínimo de um buraco na tela, pra ele não sumir com o zoom longe. */
   minHoleRadiusPx?: number;
+  /** Prevê a posição da câmera durante o pan, pra compensar o atraso do aviso de câmera. */
+  predictPan?: boolean;
+  /** Desenha uma mira no centro de cada buraco, pra comparar com um marcador do mapa. */
+  debugCenters?: boolean;
 };
 
 type Frame = {
@@ -53,6 +74,11 @@ type Frame = {
   holeCount: number;
   newestIndex: number;
   tap: number[];
+  /** Instante da amostra de câmera (ms, relógio do aparelho). 0 = sem amostra. */
+  ts: number;
+  /** Velocidade do pan em pontos de tela por ms. */
+  vx: number;
+  vy: number;
 };
 
 const EMPTY_FRAME: Frame = {
@@ -63,6 +89,9 @@ const EMPTY_FRAME: Frame = {
   holeCount: 0,
   newestIndex: -1,
   tap: [0, 0],
+  ts: 0,
+  vx: 0,
+  vy: 0,
 };
 
 export function FogOverlay({
@@ -73,6 +102,8 @@ export function FogOverlay({
   outlineColor,
   renderScale = 2,
   minHoleRadiusPx = 0,
+  predictPan = false,
+  debugCenters = false,
 }: FogOverlayProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
 
@@ -83,6 +114,8 @@ export function FogOverlay({
   const holesRef = useRef(holes);
   const sizeRef = useRef(size);
   const minRadiusRef = useRef(minHoleRadiusPx);
+  // Última amostra de câmera com carimbo de tempo, pra medir a velocidade do pan.
+  const sampleRef = useRef({ cx: 0, cy: 0, zoom: 0, ts: 0, vx: 0, vy: 0 });
 
   const frame = useSharedValue<Frame>(EMPTY_FRAME);
   const tapStrength = useSharedValue(0);
@@ -96,6 +129,7 @@ export function FogOverlay({
     const noise = computeNoise(camera);
     const projected = projectHoles(holesRef.current, camera, viewport, minRadiusRef.current);
     const tap = tapRef.current ? project(tapRef.current, camera, viewport) : { x: 0, y: 0 };
+    const sample = sampleRef.current;
 
     frame.set({
       noiseA: [noise.a.offsetX, noise.a.offsetY, noise.a.cellsPerPixel],
@@ -105,12 +139,31 @@ export function FogOverlay({
       holeCount: projected.count,
       newestIndex: projected.newestIndex,
       tap: [tap.x, tap.y],
+      ts: sample.ts,
+      vx: sample.vx,
+      vy: sample.vy,
     });
   }, [frame]);
 
   useImperativeHandle(ref, () => ({
-    setCamera: (camera) => {
+    setCamera: (camera, timestampMs) => {
       cameraRef.current = camera;
+      if (timestampMs) {
+        const prev = sampleRef.current;
+        const center = lngLatToWorld(camera.center);
+        const size = worldSize(camera.zoom);
+        const cx = center.x * size;
+        const cy = center.y * size;
+        const dt = timestampMs - prev.ts;
+        let vx = 0;
+        let vy = 0;
+        // Só prevê pan puro (zoom igual) e com amostras próximas no tempo.
+        if (dt > 0 && dt < 120 && camera.zoom === prev.zoom) {
+          vx = 0.4 * prev.vx + (0.6 * (cx - prev.cx)) / dt;
+          vy = 0.4 * prev.vy + (0.6 * (cy - prev.cy)) / dt;
+        }
+        sampleRef.current = { cx, cy, zoom: camera.zoom, ts: timestampMs, vx, vy };
+      }
       recompute();
     },
     dissipate: (lngLat) => {
@@ -152,25 +205,54 @@ export function FogOverlay({
   const outlineRgba = [outline[0], outline[1], outline[2], outline[3]];
   const { width, height } = size;
 
+  // Previsão do pan. O mapa avisa a mudança de câmera com atraso (nativo → JS →
+  // aqui), então num arrasto rápido a névoa ficaria pra trás. Cada amostra de
+  // câmera traz o instante em que foi gerada; a cada quadro, na thread de UI,
+  // adiantamos a névoa pelo tempo decorrido desde a amostra, na velocidade
+  // medida entre as duas últimas. Sem amostra nova a previsão some, pra névoa
+  // não passar do ponto quando o mapa para.
+  const shift = useSharedValue([0, 0]);
+
+  useFrameCallback(() => {
+    'worklet';
+    const f = frame.value;
+    if (!predictPan || f.ts === 0 || (f.vx === 0 && f.vy === 0)) {
+      if (shift.value[0] !== 0 || shift.value[1] !== 0) shift.value = [0, 0];
+      return;
+    }
+    const lead = Date.now() - f.ts + PIPELINE_MS;
+    const fade = lead > PREDICT_HOLD_MS ? Math.max(0, 1 - (lead - PREDICT_HOLD_MS) / 100) : 1;
+    const ahead = Math.min(lead, PREDICT_MAX_MS) * fade;
+    shift.value = [f.vx * ahead, f.vy * ahead];
+  });
+
   const uniforms = useDerivedValue(() => {
     const f = frame.value;
+    const [sx, sy] = shift.value;
+    const moving = sx !== 0 || sy !== 0;
     let holeData = f.holes;
-    if (reveal.value < 1 && f.newestIndex >= 0) {
+    if (moving || (reveal.value < 1 && f.newestIndex >= 0)) {
       holeData = f.holes.slice();
-      holeData[f.newestIndex * 3 + 2] *= reveal.value;
+      if (f.newestIndex >= 0) holeData[f.newestIndex * 3 + 2] *= reveal.value;
+      // A câmera andando +x leva o conteúdo pra -x na tela.
+      for (let i = 0; i < f.holeCount; i++) {
+        holeData[i * 3] -= sx;
+        holeData[i * 3 + 1] -= sy;
+      }
     }
     return {
       uRes: [width, height],
       uScale: renderScale,
       uTime: clock.value / 1000,
-      uNoiseA: f.noiseA,
-      uNoiseB: f.noiseB,
+      uNoiseA: [f.noiseA[0] + sx * f.noiseA[2], f.noiseA[1] + sy * f.noiseA[2], f.noiseA[2]],
+      uNoiseB: [f.noiseB[0] + sx * f.noiseB[2], f.noiseB[1] + sy * f.noiseB[2], f.noiseB[2]],
       uBlend: f.blend,
       uHoles: holeData,
       uHoleCount: f.holeCount,
-      uTap: [f.tap[0], f.tap[1], TAP_RADIUS, tapStrength.value],
+      uTap: [f.tap[0] - sx, f.tap[1] - sy, TAP_RADIUS, tapStrength.value],
       uFog: fogRgb,
       uOutline: outlineRgba,
+      uDebug: debugCenters ? 1 : 0,
     };
   });
 
