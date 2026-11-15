@@ -17,16 +17,16 @@ import { FOG_SHADER } from './fogShader';
 const effect = Skia.RuntimeEffect.Make(FOG_SHADER);
 if (!effect) console.error('Névoa: o shader não compilou.');
 
-/** Alcance do sopro ao toque, em pontos de tela (queda gaussiana, sem borda dura). */
-const TAP_RADIUS = 120;
-/** O sopro afasta a névoa e ela começa a voltar em seguida. Total: 2 s. */
-const TAP_OUT_MS = 380;
-const TAP_BACK_MS = 1620;
+/** Raio, em pontos de tela, da área que a camada densa desocupa ao toque. */
+const TAP_RADIUS = 84;
+/** A camada densa abre rápido e começa a fechar em seguida, de forma gradual. */
+const TAP_OPEN_MS = 260;
+const TAP_CLOSE_MS = 1900;
 
 export type FogOverlayHandle = {
   /** Avisa a névoa de cada mudança de câmera do mapa. */
   setCamera: (camera: Camera) => void;
-  /** Sopra a névoa ao redor do ponto: ela afina, se afasta de leve e volta. */
+  /** Abre a camada densa ao redor do ponto; ela fecha de volta em seguida. A fina fica. */
   dissipate: (lngLat: LngLat) => void;
 };
 
@@ -117,8 +117,8 @@ export function FogOverlay({
       recompute();
       tapStrength.set(
         withSequence(
-          withTiming(1, { duration: TAP_OUT_MS, easing: Easing.out(Easing.quad) }),
-          withTiming(0, { duration: TAP_BACK_MS, easing: Easing.inOut(Easing.sin) }),
+          withTiming(1, { duration: TAP_OPEN_MS, easing: Easing.out(Easing.cubic) }),
+          withTiming(0, { duration: TAP_CLOSE_MS, easing: Easing.inOut(Easing.quad) }),
         ),
       );
     },

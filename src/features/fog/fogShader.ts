@@ -3,7 +3,13 @@ import { HOLE_REACH, MAX_HOLES, NOISE_PERIOD } from './fogMath';
 /**
  * Shader da névoa (SkSL, roda na GPU a cada pixel).
  *
- * Ideia geral:
+ * Duas camadas:
+ *  - Fina: véu que cobre o mapa inteiro e deixa ver o mapa de leve. Só sai
+ *    onde um lugar foi destravado (buraco permanente).
+ *  - Densa: cúmulo opaco por cima da fina. Sai nos buracos permanentes e
+ *    também, por um instante, onde a pessoa toca.
+ *
+ * Como funciona:
  *  1. Ruído fractal "billow" preso ao mapa dá o relevo de cúmulo: topos
  *     arredondados separados por vincos.
  *  2. Cada buraco contribui para um "campo" com um núcleo suave. Onde o campo
@@ -11,6 +17,7 @@ import { HOLE_REACH, MAX_HOLES, NOISE_PERIOD } from './fogMath';
  *     vizinhos se fundem numa forma só (metaball) em vez de virarem círculos.
  *  3. O limiar é perturbado pelo relevo, o que deixa a borda esfiapada.
  *  4. O relevo é iluminado de um lado, o que dá o volume.
+ *  5. As duas camadas derivam com o "vento" em velocidades diferentes.
  */
 export const FOG_SHADER = `
 uniform float2 uRes;       // tamanho da tela, em pontos
@@ -21,7 +28,7 @@ uniform float3 uNoiseB;    // idem, nível superior
 uniform float  uBlend;     // mistura entre os dois níveis
 uniform float3 uHoles[${MAX_HOLES}]; // x, y, raio (pontos de tela)
 uniform float  uHoleCount;
-uniform float4 uTap;       // x, y, alcance do sopro (pontos de tela), força 0..1
+uniform float4 uTap;       // x, y, raio (pontos de tela), força 0..1
 uniform float3 uFog;       // cor da névoa
 uniform float4 uOutline;   // cor do contorno; alpha 0 desliga
 
@@ -64,10 +71,19 @@ float cloud(float2 p) {
   return clamp(sum / 0.9375, 0.0, 1.0);
 }
 
-// Respiração: os gomos incham e deslizam bem devagar.
+// Vida da camada densa: os gomos incham e ondulam, e a massa toda deriva
+// com o vento. Escalas inteiras pra manter o ruído periódico.
 float2 breathe(float2 p, float t) {
-  float2 sway = float2(gnoise(p + float2(0.0, t * 0.05)), gnoise(p + float2(7.0, -t * 0.04)));
-  return sway * 0.22 + float2(t * 0.010, t * 0.006);
+  float2 sway = float2(gnoise(p + float2(0.0, t * 0.06)), gnoise(p + float2(7.0, -t * 0.05)));
+  return sway * 0.30 + float2(t * 0.030, t * 0.011);
+}
+
+// Véu da camada fina, em [0, 1]: fiapos largos que correm mais rápido que a
+// camada densa e em direção um pouco diferente (dá profundidade).
+float veil(float2 p, float t) {
+  float2 q = p + float2(t * 0.062, -t * 0.021) + float2(53.0, 29.0);
+  float n = gnoise(q) + 0.5 * gnoise(q * 2.0 + float2(t * 0.04, 11.0));
+  return clamp(0.5 + n * 0.62, 0.0, 1.0);
 }
 
 // Núcleo suave de suporte compacto: 1 no centro, 0 a partir de "reach".
@@ -85,14 +101,13 @@ half4 main(float2 fragCoord) {
   float2 xy = fragCoord * uScale;
   float2 fromCenter = xy - uRes * 0.5;
 
-  // Toque: um sopro. Queda gaussiana (sem borda definida) a partir do ponto
-  // tocado; a nuvem é empurrada de leve pra fora, sem abrir buraco.
+  // Toque: empurra a amostragem do relevo da camada densa pra fora do ponto tocado.
   float2 tapDir = xy - uTap.xy;
   float tapDist = length(tapDir);
-  float tapK = uTap.w * exp(-(tapDist * tapDist) / (uTap.z * uTap.z));
-  // Deslocamento proporcional à distância: zero no centro, sem vinco no ponto tocado.
-  float2 pushed = fromCenter - tapDir * tapK * 0.55;
+  float tapK = uTap.w * kernel(tapDist, uTap.z * 1.6);
+  float2 pushed = fromCenter - normalize(tapDir + float2(0.0001)) * tapK * uTap.z * 0.35;
 
+  // --- Camada densa -------------------------------------------------------
   float2 pa = noiseCoord(uNoiseA, pushed);
   float2 pb = noiseCoord(uNoiseB, pushed);
   float2 qa = pa + breathe(pa, uTime);
@@ -105,38 +120,52 @@ half4 main(float2 fragCoord) {
   float shade = clamp(0.5 + (h - hLit) * 1.7, 0.0, 1.0);
 
   // Campo dos buracos permanentes (metaball).
-  float field = 0.0;
+  float holes = 0.0;
   for (int i = 0; i < ${MAX_HOLES}; i++) {
     if (float(i) < uHoleCount) {
       float3 hole = uHoles[i];
-      field += kernel(distance(xy, hole.xy), hole.z * REACH);
+      holes += kernel(distance(xy, hole.xy), hole.z * REACH);
     }
   }
+  // O toque soma ao campo só da camada densa.
+  float field = holes + uTap.w * kernel(tapDist, uTap.z * REACH) * 1.4;
+
   // kernel(raio, raio * REACH) = 0.42: o buraco sozinho abre perto do raio.
   // O relevo desloca o limiar só onde já existe campo, pra borda esfiapar
   // sem abrir furos longe dos buracos.
+  float pulse = 0.01 * sin(uTime * 0.6);
   float fray = (h - 0.42) * 0.75 * smoothstep(0.0, 0.22, field);
-  float open = smoothstep(0.26, 0.58, field + fray + 0.01 * sin(uTime * 0.6));
-  float alpha = 1.0 - open;
+  float denseA = 1.0 - smoothstep(0.26, 0.58, field + fray + pulse);
+  // Mais rala perto da borda aberta.
+  denseA *= mix(0.82, 1.0, smoothstep(0.0, 0.6, denseA));
 
-  // Cor: topos na cor da névoa, vincos e lado oposto à luz em sombra fria e suave.
+  // Topos na cor da névoa, vincos e lado oposto à luz em sombra fria e suave.
   float3 shadow = uFog * float3(0.83, 0.87, 0.92);
   float3 light = min(uFog * 1.05, float3(1.0));
   float lit = smoothstep(0.2, 0.8, shade) * 0.45 + smoothstep(0.05, 0.55, h) * 0.55;
-  float3 color = mix(shadow, light, lit);
+  float3 denseC = mix(shadow, light, lit);
 
-  // Sopro: a névoa afina onde foi soprada, mais nos vincos do que nos gomos,
-  // e sempre sobra uma camada fina sobre o mapa.
-  float thin = tapK * (0.62 + 0.38 * (1.0 - h));
-  alpha *= 1.0 - 0.66 * clamp(thin, 0.0, 1.0);
+  // --- Camada fina --------------------------------------------------------
+  // Não reage ao toque: usa a posição sem o empurrão.
+  float v = mix(
+    veil(noiseCoord(uNoiseA, fromCenter), uTime),
+    veil(noiseCoord(uNoiseB, fromCenter), uTime),
+    uBlend
+  );
+  float thinFray = (v - 0.5) * 0.6 * smoothstep(0.0, 0.22, holes);
+  float thinOpen = smoothstep(0.26, 0.58, holes + thinFray + pulse);
+  float thinA = (0.44 + 0.26 * v) * (1.0 - thinOpen);
+  float3 thinC = mix(shadow, uFog, v);
 
-  // A névoa fica mais rala perto da borda aberta.
-  alpha *= mix(0.82, 1.0, smoothstep(0.0, 0.6, alpha));
+  // Contorno (tema claro): faixa na borda dos buracos permanentes.
+  float edge = 1.0 - thinOpen;
+  float band = smoothstep(0.08, 0.35, edge) * (1.0 - smoothstep(0.45, 0.80, edge));
+  thinC = mix(thinC, uOutline.rgb, band * uOutline.a);
+  thinA = max(thinA, band * uOutline.a * 0.9);
 
-  // Contorno (tema claro): faixa na transição entre névoa e mapa.
-  float band = smoothstep(0.08, 0.35, alpha) * (1.0 - smoothstep(0.45, 0.80, alpha));
-  color = mix(color, uOutline.rgb, band * uOutline.a);
-
-  return half4(color * alpha, alpha);
+  // --- Composição: densa sobre a fina (alpha pré-multiplicado) -------------
+  float alpha = denseA + thinA * (1.0 - denseA);
+  float3 color = denseC * denseA + thinC * thinA * (1.0 - denseA);
+  return half4(color, alpha);
 }
 `;
