@@ -18,10 +18,11 @@ const effect = Skia.RuntimeEffect.Make(FOG_SHADER);
 if (!effect) console.error('Névoa: o shader não compilou.');
 
 /** Raio, em pontos de tela, da área que a camada densa desocupa ao toque. */
-const TAP_RADIUS = 84;
+const TAP_RADIUS = 96;
 /** A camada densa abre rápido e começa a fechar em seguida, de forma gradual. */
 const TAP_OPEN_MS = 260;
-const TAP_CLOSE_MS = 1900;
+// A abertura some de vista um pouco antes do fim da animação (~1,8 s de fechamento visível).
+const TAP_CLOSE_MS = 2300;
 
 export type FogOverlayHandle = {
   /** Avisa a névoa de cada mudança de câmera do mapa. */

@@ -105,7 +105,15 @@ half4 main(float2 fragCoord) {
   float2 tapDir = xy - uTap.xy;
   float tapDist = length(tapDir);
   float tapK = uTap.w * kernel(tapDist, uTap.z * 1.6);
-  float2 pushed = fromCenter - normalize(tapDir + float2(0.0001)) * tapK * uTap.z * 0.35;
+  // Empurrão pequeno: se for grande, estica o relevo em volta do toque e alisa a borda.
+  float2 pushed = fromCenter - normalize(tapDir + float2(0.0001)) * tapK * uTap.z * 0.14;
+
+  // Véu da camada fina. Não reage ao toque: usa a posição sem o empurrão.
+  float v = mix(
+    veil(noiseCoord(uNoiseA, fromCenter), uTime),
+    veil(noiseCoord(uNoiseB, fromCenter), uTime),
+    uBlend
+  );
 
   // --- Camada densa -------------------------------------------------------
   float2 pa = noiseCoord(uNoiseA, pushed);
@@ -127,14 +135,20 @@ half4 main(float2 fragCoord) {
       holes += kernel(distance(xy, hole.xy), hole.z * REACH);
     }
   }
-  // O toque soma ao campo só da camada densa.
-  float field = holes + uTap.w * kernel(tapDist, uTap.z * REACH) * 1.4;
+  // O toque entra no campo da camada densa como um buraco igual aos
+  // permanentes, então a borda esfiapa do mesmo jeito. No fechamento o raio
+  // encolhe um pouco e, principalmente, o campo perde força: a névoa vai
+  // preenchendo a abertura de fora pra dentro com a borda cada vez mais
+  // esfiapada, em vez de virar um círculo pequeno e duro.
+  float tapRadius = uTap.z * (0.6 + 0.4 * uTap.w);
+  float field = holes + kernel(tapDist, tapRadius * REACH) * pow(uTap.w, 0.55);
 
   // kernel(raio, raio * REACH) = 0.42: o buraco sozinho abre perto do raio.
   // O relevo desloca o limiar só onde já existe campo, pra borda esfiapar
   // sem abrir furos longe dos buracos.
   float pulse = 0.01 * sin(uTime * 0.6);
-  float fray = (h - 0.42) * 0.75 * smoothstep(0.0, 0.22, field);
+  // Dois ruídos de tamanhos diferentes na borda: recortes largos e fiapos finos.
+  float fray = ((h - 0.42) * 0.8 + (v - 0.5) * 0.5) * smoothstep(0.0, 0.22, field);
   float denseA = 1.0 - smoothstep(0.26, 0.58, field + fray + pulse);
   // Mais rala perto da borda aberta.
   denseA *= mix(0.82, 1.0, smoothstep(0.0, 0.6, denseA));
@@ -146,12 +160,6 @@ half4 main(float2 fragCoord) {
   float3 denseC = mix(shadow, light, lit);
 
   // --- Camada fina --------------------------------------------------------
-  // Não reage ao toque: usa a posição sem o empurrão.
-  float v = mix(
-    veil(noiseCoord(uNoiseA, fromCenter), uTime),
-    veil(noiseCoord(uNoiseB, fromCenter), uTime),
-    uBlend
-  );
   float thinFray = (v - 0.5) * 0.6 * smoothstep(0.0, 0.22, holes);
   float thinOpen = smoothstep(0.26, 0.58, holes + thinFray + pulse);
   float thinA = (0.44 + 0.26 * v) * (1.0 - thinOpen);
