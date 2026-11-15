@@ -160,8 +160,12 @@ half4 main(float2 fragCoord) {
   float3 denseC = mix(shadow, light, lit);
 
   // --- Camada fina --------------------------------------------------------
-  float thinFray = (v - 0.5) * 0.6 * smoothstep(0.0, 0.22, holes);
-  float thinOpen = smoothstep(0.26, 0.58, holes + thinFray + pulse);
+  // Borda do véu nos buracos permanentes: mesmos dois ruídos da camada densa,
+  // mas com o relevo invertido. Onde a densa recua o véu avança, então os
+  // fiapos do véu aparecem nas reentrâncias em vez de repetir o mesmo contorno.
+  // Transição mais larga que a da densa, pra borda do véu se desfazer.
+  float thinFray = ((0.5 - h) * 0.7 + (v - 0.5) * 0.75) * smoothstep(0.0, 0.22, holes);
+  float thinOpen = smoothstep(0.20, 0.66, holes + thinFray + pulse);
   float thinA = (0.44 + 0.26 * v) * (1.0 - thinOpen);
   float3 thinC = mix(shadow, uFog, v);
 
