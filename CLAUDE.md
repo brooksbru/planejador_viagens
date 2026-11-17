@@ -13,7 +13,7 @@ Instruções completas e fases: `docs/prompt-inicial.md`. Fonte de verdade visua
 - Expo SDK 58, React Native 0.88, TypeScript estrito, Expo Router (rotas em `src/app/`)
 - Development build (`expo-dev-client`), não Expo Go: o mapa usa módulo nativo
 - Mapa: Mapbox via `@rnmapbox/maps`, isolado em `src/features/map/` (MapLibre é a rota de fuga de custo)
-- Névoa: overlay `@shopify/react-native-skia` com shader (ruído fractal + metaball), em `src/features/fog/`
+- Névoa: overlay `@shopify/react-native-skia` com shader (ruído fractal + metaball), em `src/features/fog/`. Duas camadas (véu fino + cúmulo denso), só sobre a terra (máscara `assets/images/land-mask.png`). Detalhes, medições e limitações em `docs/fase-1.md`
 - Backend (Fase 2+): Supabase (Postgres + PostGIS, Auth Google, Storage privado)
 - Busca de lugares: só nome + coordenada (Mapbox Search). Nada de fotos/avaliações/horários do Google
 - Ambiente: Windows 11, emulador Android. iPhone depois via EAS Build
@@ -28,7 +28,9 @@ src/features/<x>/   código por funcionalidade (map, fog, ...)
 src/lib/            lógica pura, com testes (geo, raios, percentuais, conquistas)
 assets/fonts/       TTFs embarcados pelo plugin do expo-font
 scripts/fonts/      gera as instâncias estáticas da Fraunces
-docs/               design, referências, prompt inicial. Não mover nem apagar
+scripts/fog/        gera a máscara de terra/mar da névoa
+plugins/            config plugins próprios (ajuste de CMake para o Skia)
+docs/               design, referências, prompt inicial, fase-N.md (documentação de cada fase). Não mover nem apagar
 ```
 
 ## Design: resumo do docs/design.md
@@ -84,7 +86,9 @@ Foto + localização são dado pessoal: RLS em todas as tabelas, fotos em bucket
 - Tokens/segredos só em `.env` (fora do git); `.env.example` documenta as variáveis
 - Nunca editar `android/`/`ios/` à mão: são gerados (prebuild). Configuração nativa via `app.json` e config plugins
 - Fontes: no Android cada peso é uma família (nome do arquivo); use `typography.*`/`fonts.*`, nunca `fontWeight`
-- Antes de dar algo por pronto: `npm run typecheck`, `npm run lint`, `npm run format:check`
+- Antes de dar algo por pronto: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test`
+- Mapa plano: projeção Mercator, sem rotação nem inclinação (a névoa depende disso). Nada fora de `src/features/map/` importa o SDK do Mapbox
+- A aba Mapa ainda tem controles de teste do spike (fps, chips, botão de abrir névoa): saem quando o check-in real existir (Fase 4)
 
 ## Comandos
 
