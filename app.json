@@ -10,6 +10,7 @@
     "backgroundColor": "#0C2630",
     "android": {
       "package": "com.brooksbru.planejadorviagens",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
       "adaptiveIcon": {
         "backgroundColor": "#0C2630",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -51,7 +52,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "@rnmapbox/maps",
+      "./plugins/withCmakePolicyMinimum"
     ],
     "experiments": {
       "typedRoutes": true,
